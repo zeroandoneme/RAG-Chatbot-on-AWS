@@ -170,39 +170,30 @@ export class ChatbotCdkStack extends cdk.Stack {
         }),
         // Allow the role to create SageMaker resources
         SageMakerAccess: new iam.PolicyDocument({
-          statements: [
+        statements: [
             new iam.PolicyStatement({
-              actions: [
+            actions: [
                 "sagemaker:CreateModel",
                 "sagemaker:CreateEndpoint",
                 "sagemaker:CreateEndpointConfig"
-              ],
-              resources: ['*']
+            ],
+            resources: ['*']
             }),
-          ],
+        ],
         }),
-//         Ec2Access: new iam.PolicyDocument({
-//             statements: [
-//                 new iam.PolicyStatement({
-//                     actions: [
-//                     "ec2:DescribeSubnets",
-//                     "ec2:DescribeSecurityGroups",
-//                     "ec2:DescribeNetworkInterfaces",
-//                     "ec2:CreateNetworkInterfacePermission",
-//                     "ec2:DeleteNetworkInterfacePermission",
-//                     "ec2:DescribeVpcEndpoints",
-//                     "ec2:DescribeVpcs",
-//                     "ec2:CreateNetworkInterface",
-//                     "ec2:DescribeDhcpOptions",
-//                     "ec2:DeleteNetworkInterfacePermission",
-//                     "ec2:DeleteNetworkInterface"
-//                     ],
-//                     resources: ["*"]
-//                 })
-//             ]
-//         })
-      }
+        OpenSearchAccess: new iam.PolicyDocument({
+        statements: [
+            new iam.PolicyStatement({
+            actions: [
+                "es:*"
+            ],
+            resources: ["*"]
+            }),
+        ],
+        }),
+    }
     })
+
 
     const ingestSagemakerModel = new sagemaker.CfnModel(this, 'ingestCfnModel', {
       executionRoleArn: sagemakerRole.roleArn,
@@ -297,6 +288,7 @@ export class ChatbotCdkStack extends cdk.Stack {
       handler: 'index.lambda_handler',
       role: chatbotLambdaRole,
       functionName: 'chatbotAnswer',
+      timeout: Duration.minutes(1),
       environment: {
         ENDPOINT_NAME : answerEndpoint.attrEndpointName,
       },
@@ -332,10 +324,10 @@ export class ChatbotCdkStack extends cdk.Stack {
     const deployment = new apigateway.Deployment(this, 'Deployment', {
       api,
     });
-    new apigateway.Stage(this, 'Stage', {
-      deployment,
-      stageName: 'default',
-    });
+//     new apigateway.Stage(this, 'Stage', {
+//       deployment,
+//       stageName: 'default',
+//     });
 
   }
 }

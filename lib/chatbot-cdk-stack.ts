@@ -8,15 +8,16 @@ import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import { aws_sagemaker as sagemaker } from 'aws-cdk-lib';
 import { aws_secretsmanager as secretsmanager } from 'aws-cdk-lib';
 import { aws_opensearchservice as opensearchservice } from 'aws-cdk-lib';
-import { aws_apigateway as apigateway} from 'aws-cdk-lib';
 import { aws_lambda as lambda} from 'aws-cdk-lib';
+import { CfnOutput } from 'aws-cdk-lib';
+import { HttpMethod } from 'aws-cdk-lib/aws-lambda';
 
 export class ChatbotCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
     const ingestImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:ingest`;
-    const ingestInstanceType = "ml.m4.xlarge";
+    const ingestInstanceType = "ml.m5.2xlarge";
     const ingestInstanceCount = 1;
 
     const answerImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:answer`;
@@ -65,7 +66,6 @@ export class ChatbotCdkStack extends cdk.Stack {
       clusterConfig: {
         instanceCount: 2,
         instanceType: 't3.medium.search',
-//         multiAzWithStandbyEnabled: false,
         zoneAwarenessConfig: {
           availabilityZoneCount: 2,
         },
@@ -74,7 +74,6 @@ export class ChatbotCdkStack extends cdk.Stack {
       domainEndpointOptions: {
         enforceHttps: true,
       },
-//       domainName: 'chatbot-opensearch-domain',
       ebsOptions: {
         ebsEnabled: true,
         iops: 3000,
@@ -110,24 +109,6 @@ export class ChatbotCdkStack extends cdk.Stack {
       image: answerImageUri,
       mode: 'SingleModel',
     };
-
-//     const vpcID = "vpc-0c57816d11f4c8d3a"
-//     const sagemakerVpc = ec2.Vpc.fromLookup(this, 'external-vpc', {
-//       vpcId: vpcID,
-//     });
-//
-//     const vpcSubnets = sagemakerVpc.selectSubnets({
-//         subnetType: ec2.SubnetType.PUBLIC
-//     });
-//
-//     const sagemakerSecurityGroup = new ec2.SecurityGroup(this, 'SG', {
-//         vpc: sagemakerVpc,
-//     });
-
-//     const vpcConfigProperty: sagemaker.CfnModel.VpcConfigProperty = {
-//         securityGroupIds: [sagemakerSecurityGroup.securityGroupId],
-//          subnets: vpcSubnets.subnetIds,
-//     }
 
     const sagemakerRole = new iam.Role(this, 'sagemakerRole', {
       assumedBy: new iam.ServicePrincipal('sagemaker.amazonaws.com'),
@@ -193,12 +174,10 @@ export class ChatbotCdkStack extends cdk.Stack {
     }
     })
 
-
     const ingestSagemakerModel = new sagemaker.CfnModel(this, 'ingestCfnModel', {
       executionRoleArn: sagemakerRole.roleArn,
       modelName: 'chatbot-ingest',
       primaryContainer: ingestDefinitionProperty,
-//       vpcConfig: vpcConfigProperty
     });
     ingestSagemakerModel.node.addDependency(sagemakerRole,cfnSecret)
 
@@ -206,7 +185,6 @@ export class ChatbotCdkStack extends cdk.Stack {
       executionRoleArn: sagemakerRole.roleArn,
       modelName: 'chatbot-answer',
       primaryContainer: answerDefinitionProperty,
-//       vpcConfig: vpcConfigProperty
     });
     answerSagemakerModel.node.addDependency(sagemakerRole,cfnSecret)
 
@@ -281,6 +259,16 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     ingestLambda.node.addDependency(codeDeployment, chatbotLambdaRole);
 
+    const ingestLambdaUrl = ingestLambda.addFunctionUrl({
+        authType: lambda.FunctionUrlAuthType.NONE,
+        cors: {
+            allowedMethods: [HttpMethod.POST]
+      },
+    });
+    new CfnOutput(this, 'ingestLambdaUrl', {
+        value: ingestLambdaUrl.url,
+    });
+
     const answerLambda = new lambda.Function(this, 'answerLambda', {
       code: lambda.Code.fromBucket(modelBucket, 'lambda-scripts/answer-code.zip'),
       runtime: lambda.Runtime.PYTHON_3_10,
@@ -294,36 +282,15 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     answerLambda.node.addDependency(codeDeployment, chatbotLambdaRole);
 
-    const api = new apigateway.RestApi(this, 'Api', {
-      restApiName: 'chatbotApi',
+    const answerLambdaUrl = answerLambda.addFunctionUrl({
+        authType: lambda.FunctionUrlAuthType.NONE,
+        cors: {
+            allowedMethods: [HttpMethod.POST]
+      },
     });
-    api.node.addDependency(answerLambda, ingestLambda)
-
-    const ingestLambdaApi = new apigateway.LambdaIntegration(ingestLambda, {
-      proxy: true, // Enable proxy integration
+    new CfnOutput(this, 'answerLambdaUrl', {
+        value: answerLambdaUrl.url,
     });
-
-    const ingestRoute = api.root.addResource('ingest');
-    ingestRoute.addCorsPreflight({
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS // this is also the default
-    });
-    ingestRoute.addMethod('POST', ingestLambdaApi);
-
-    const answerLambdaApi = new apigateway.LambdaIntegration(answerLambda, {
-      proxy: true, // Enable proxy integration
-    });
-    const answerRoute = api.root.addResource('answer');
-    answerRoute.addCorsPreflight({
-        allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: apigateway.Cors.ALL_METHODS // this is also the default
-    });
-    answerRoute.addMethod('POST', answerLambdaApi);
-
-    const deployment = new apigateway.Deployment(this, 'Deployment', {
-      api,
-    });
-
   }
 }
 

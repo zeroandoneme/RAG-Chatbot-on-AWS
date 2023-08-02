@@ -15,13 +15,12 @@ export class ChatbotCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const ingestImageUri = "293175704869.dkr.ecr.eu-west-1.amazonaws.com/chatbot:ingest";
+    const ingestImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:ingest`;
     const ingestInstanceType = "ml.m4.xlarge";
     const ingestInstanceCount = 1;
 
-    const answerImageUri = "293175704869.dkr.ecr.eu-west-1.amazonaws.com/chatbot:answer";
+    const answerImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:answer`;
     const answerInstanceType = "ml.g5.12xlarge";
-//     const answerInstanceType = "ml.m4.xlarge";
     const answerInstanceCount = 1;
 
     // Create an S3 bucket to store chatbot docs
@@ -324,10 +323,6 @@ export class ChatbotCdkStack extends cdk.Stack {
     const deployment = new apigateway.Deployment(this, 'Deployment', {
       api,
     });
-//     new apigateway.Stage(this, 'Stage', {
-//       deployment,
-//       stageName: 'default',
-//     });
 
   }
 }

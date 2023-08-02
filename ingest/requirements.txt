@@ -1,0 +1,17 @@
+requests
+waitress
+botocore
+boto3==1.26.129
+langchain==0.0.197
+PyMuPDF==1.22.3
+python-dotenv==1.0.0
+unstructured==0.6.6
+extract-msg==0.41.1
+tabulate==0.9.0
+pandoc==2.3
+pypandoc==1.11
+tqdm==4.65.0
+sentence_transformers==2.2.2
+opensearch-py==2.2.0
+flask==2.3.2
+urllib3==1.26.16

@@ -1,0 +1,12 @@
+requests
+waitress
+botocore
+boto3==1.26.129
+aws-secretsmanager-caching
+langchain
+gpt4all==0.3.4
+python-dotenv==1.0.0
+sentence_transformers==2.2.2
+opensearch-py==2.2.0
+flask==2.3.2
+urllib3==1.26.16

@@ -1,7 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import { Duration } from 'aws-cdk-lib/core';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
@@ -16,29 +15,33 @@ export class ChatbotCdkStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const ingestImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:ingest`;
+    // Model deployment configuration and Image uri 
+    const ingestImageUri = "293175704869.dkr.ecr.eu-west-1.amazonaws.com/chatbot:ingest";
     const ingestInstanceType = "ml.m5.2xlarge";
     const ingestInstanceCount = 1;
 
-    const answerImageUri = `${cdk.Aws.ACCOUNT_ID}.dkr.ecr.${cdk.Aws.REGION}.amazonaws.com/chatbot:answer`;
-    const answerInstanceType = "ml.g5.12xlarge";
+    const answerImageUri = "293175704869.dkr.ecr.eu-west-1.amazonaws.com/chatbot:answer";
+    const answerInstanceType = "ml.g5.8xlarge";
     const answerInstanceCount = 1;
 
-    // Create an S3 bucket to store chatbot docs
+    // S3 bucket where the lambda code is stored
     const modelBucket = new s3.Bucket(this, 'Chatbot-data', {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Username parameter input for opensearch
     const masterUser = new cdk.CfnParameter(this, 'opensearchUsername', {
       type: 'String',
       description: 'Username for OpenSearch master user',
     });
 
+    // Password parameter input for opensearch
     const masterPassword = new cdk.CfnParameter(this, 'opensearchPassword', {
       type: 'String',
       description: 'Password for OpenSearch master user',
     });
 
+    // Opensearch access policy
     const accessPolicy: any = {
       Version: '2012-10-17',
       Statement: [
@@ -53,6 +56,7 @@ export class ChatbotCdkStack extends cdk.Stack {
     ]
     };
 
+    // Creates a new OpensearchDomain
     const cfnDomain = new opensearchservice.CfnDomain(this, 'ChatbotDomain', {
       accessPolicies: accessPolicy,
       advancedSecurityOptions: {
@@ -90,8 +94,9 @@ export class ChatbotCdkStack extends cdk.Stack {
       },
     });
 
+    // Creates a new secret to store required inputs by the model for OpenSearch
     const cfnSecret = new secretsmanager.CfnSecret(this, 'opensearchSecret', {
-      name: 'opensearch-secrets',
+      name: 'opensearch-secret',
       secretString: JSON.stringify({
         'MASTER_USERNAME': masterUser.valueAsString,
         'MASTER_PASSWORD': masterPassword.valueAsString,
@@ -100,16 +105,19 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     cfnSecret.node.addDependency(cfnDomain)
 
+    // Defines container for Ingest model
     const ingestDefinitionProperty: sagemaker.CfnModel.ContainerDefinitionProperty = {
       image: ingestImageUri,
       mode: 'SingleModel',
     };
 
+    // Defines container for Query model
     const answerDefinitionProperty: sagemaker.CfnModel.ContainerDefinitionProperty = {
       image: answerImageUri,
       mode: 'SingleModel',
     };
 
+    // iam role for both models provides required permissions
     const sagemakerRole = new iam.Role(this, 'sagemakerRole', {
       assumedBy: new iam.ServicePrincipal('sagemaker.amazonaws.com'),
       description: 'Model deployment role',
@@ -171,9 +179,20 @@ export class ChatbotCdkStack extends cdk.Stack {
             }),
         ],
         }),
-    }
-    })
+        SecretsManagerAccess: new iam.PolicyDocument({
+          statements: [
+            new iam.PolicyStatement({
+              actions: [
+                "secretsmanager:GetSecretValue",
+              ],
+              resources: [`arn:aws:secretsmanager:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:secret:${cfnSecret.name}*`],
+            }),
+          ],
+        }),
+      },
+    });
 
+    // Creates Ingest model
     const ingestSagemakerModel = new sagemaker.CfnModel(this, 'ingestCfnModel', {
       executionRoleArn: sagemakerRole.roleArn,
       modelName: 'chatbot-ingest',
@@ -181,6 +200,7 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     ingestSagemakerModel.node.addDependency(sagemakerRole,cfnSecret)
 
+    // Creates Query model
     const answerSagemakerModel = new sagemaker.CfnModel(this, 'answerCfnModel', {
       executionRoleArn: sagemakerRole.roleArn,
       modelName: 'chatbot-answer',
@@ -188,6 +208,7 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     answerSagemakerModel.node.addDependency(sagemakerRole,cfnSecret)
 
+    // Ingest endpoint deployment
     const ingestEndpointConfig = new sagemaker.CfnEndpointConfig(this, 'ingestEndpointConfig', {
       productionVariants: [{
         initialVariantWeight: 1.0,
@@ -203,6 +224,7 @@ export class ChatbotCdkStack extends cdk.Stack {
        endpointConfigName: ingestEndpointConfig.attrEndpointConfigName,
     });
 
+    // Query endpoint deployment
     const answerEndpointConfig = new sagemaker.CfnEndpointConfig(this, 'answerEndpointConfig', {
       productionVariants: [{
         initialVariantWeight: 1.0,
@@ -218,6 +240,7 @@ export class ChatbotCdkStack extends cdk.Stack {
        endpointConfigName: answerEndpointConfig.attrEndpointConfigName,
     });
 
+    // Uploads lambda code to s3 bucket
     const codeDeployment = new s3deploy.BucketDeployment(this, 'DeployScript', {
       sources: [s3deploy.Source.asset('code')],
       destinationBucket: modelBucket,
@@ -225,6 +248,7 @@ export class ChatbotCdkStack extends cdk.Stack {
     });
     codeDeployment.node.addDependency(modelBucket);
 
+    // Lambda role for both endpoints 
     const chatbotLambdaRole = new iam.Role(this, 'chatbotLambdaRole', {
       assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
       roleName: 'chatbotLambdaRole'
@@ -242,13 +266,15 @@ export class ChatbotCdkStack extends cdk.Stack {
     resources: [
         '*',
         `arn:aws:logs:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:*`,
-        `arn:aws:sagemaker:${cdk.Aws.REGION}:*:endpoint/*`
+        `arn:aws:sagemaker:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:endpoint/${ingestEndpoint.attrEndpointName}`,
+        `arn:aws:sagemaker:${cdk.Aws.REGION}:${cdk.Aws.ACCOUNT_ID}:endpoint/${answerEndpoint.attrEndpointName}`
     ]
     }));
 
+    // Lambda function to invoke Ingest endpoint
     const ingestLambda = new lambda.Function(this, 'ingestLambda', {
       code: lambda.Code.fromBucket(modelBucket, 'lambda-scripts/ingest-code.zip'),
-      runtime: lambda.Runtime.PYTHON_3_10,
+      runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.lambda_handler',
       role: chatbotLambdaRole,
       functionName: 'chatbotIngest',
@@ -262,16 +288,18 @@ export class ChatbotCdkStack extends cdk.Stack {
     const ingestLambdaUrl = ingestLambda.addFunctionUrl({
         authType: lambda.FunctionUrlAuthType.NONE,
         cors: {
-            allowedMethods: [HttpMethod.POST]
+          allowedOrigins: ['*'],
+          allowedMethods: [HttpMethod.ALL]
       },
     });
     new CfnOutput(this, 'ingestLambdaUrl', {
         value: ingestLambdaUrl.url,
     });
 
+    // Lambda function to invoke query endpoint
     const answerLambda = new lambda.Function(this, 'answerLambda', {
       code: lambda.Code.fromBucket(modelBucket, 'lambda-scripts/answer-code.zip'),
-      runtime: lambda.Runtime.PYTHON_3_10,
+      runtime: lambda.Runtime.PYTHON_3_11,
       handler: 'index.lambda_handler',
       role: chatbotLambdaRole,
       functionName: 'chatbotAnswer',
@@ -285,7 +313,8 @@ export class ChatbotCdkStack extends cdk.Stack {
     const answerLambdaUrl = answerLambda.addFunctionUrl({
         authType: lambda.FunctionUrlAuthType.NONE,
         cors: {
-            allowedMethods: [HttpMethod.POST]
+          allowedOrigins: ['*'],
+          allowedMethods: [HttpMethod.ALL]
       },
     });
     new CfnOutput(this, 'answerLambdaUrl', {

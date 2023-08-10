@@ -20,7 +20,7 @@ ingestion and data querying. The process follows a systematic flow as described 
 1. The data ingestion and querying endpoints are deployed on Amazon SageMaker, from a
 specified container registry.
 
-### Ingest Route:
+#### Ingest Route:
 2. The user initiates the data ingestion process by making a request to the Ingest Lambda
 function through its designated function URL.
 3. The Ingest Lambda function, upon receiving the user's request, invokes the SageMaker
@@ -33,7 +33,7 @@ access and retrieval.
 7. The user is promptly notified of the ingestion process status through the response
 received from the Lambda function.
 
-### Query Route:
+#### Query Route:
 8. To perform a data query, the user sends a request to the Query Lambda function using the
 designated function URL.
 9. The Query Lambda function, upon receiving the user's query request, invokes the

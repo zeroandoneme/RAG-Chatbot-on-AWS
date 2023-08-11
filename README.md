@@ -7,7 +7,7 @@
 
 ## Introduction
 This project combines LangChain, AWS OpenSearch, and the Llama-2-7B-Chat LLM model to establish a rapid and efficient chatbot for document querying. 
-It encompasses two models: Query and Ingest. The Query model retrieves documents from the chatbot's index to craft responses for your queries. 
+It encompasses two models: Query and Ingest. The Query model retrieves documents from the chatbot's index to generate responses for your queries. 
 Ingest prepares documents from an S3 bucket for storage as vector embeddings in a user-specified OpenSearch index.
 
 

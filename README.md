@@ -3,6 +3,7 @@
 - [Workflow](#workflow)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Useful commands](#useful-commands)
 
 
 ## Introduction

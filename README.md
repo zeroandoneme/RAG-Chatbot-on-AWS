@@ -49,7 +49,7 @@ query process.
 
 
 ## Installation
-1. Clone the repository: `git clone https://github.com/HadeelAdal/chatbot-cdk.git`
+1. Clone the repository: `git clone https://github.com/zeroandoneme/RAG-Chatbot-on-AWS.git`
 2. Navigate to the project directory: `cd chatbot-cdk`
 
 
